@@ -5,6 +5,7 @@
 #include <sys/types.h>  // ssize_t
 #include <sys/socket.h> // send(),recv()
 #include <netdb.h>      // gethostbyname()
+#include <errno.h>
 
 /**
 * Client code
@@ -94,15 +95,18 @@ void validate_files(char *key_filename, char *plain_filename, char **key_save, c
 int main(int argc, char *argv[]) {
   int socketFD, portNumber, charsWritten, charsRead;
   struct sockaddr_in serverAddress;
+
   char *key = NULL;
   char *plaintext = NULL;
-  char buffer[256];
+  char buffer[101] = {0};
 
   // * Check usage & args
   if (argc != 4) { 
     fprintf(stderr,"USAGE: %s <plaintext> <key> <port>\n", argv[0]); 
     exit(0);
   }
+
+  portNumber = atoi(argv[3]);
 
   validate_files(argv[2], argv[1], &key, &plaintext);
 
@@ -115,7 +119,7 @@ int main(int argc, char *argv[]) {
   }
 
    // Set up the server address struct
-  setupAddressStruct(&serverAddress, atoi(argv[2]), "localhost");
+  setupAddressStruct(&serverAddress, portNumber, "localhost");
 
   // Connect to server
   if (connect(socketFD, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0){
@@ -125,27 +129,64 @@ int main(int argc, char *argv[]) {
 
   // Send message to server
   // Write to the server
-  charsWritten = send(socketFD, plaintext, strlen(plaintext), 0); 
-  if (charsWritten < 0){
-    fprintf(stderr, "CLIENT: ERROR writing to socket");
-    exit(1);
+  charsWritten = send(socketFD, "I am enc server", 16, 0);
+  charsRead = recv(socketFD, buffer, sizeof(buffer) - 1, 0);
+  if (strcmp(buffer, "Connection refused") == 0) {
+    fprintf(stderr, "Connection rejected by server\n");
+    exit(2);
   }
-  if (charsWritten < strlen(plaintext)){
-    fprintf(stderr, "CLIENT: WARNING: Not all data written to socket!\n");
-    exit(1);
+  
+  // * msg format: <key>#<plaintext>
+  // * allocating space for key + '#' + plaintext + '$' + '\0'
+  char *msg = calloc(strlen(key) + strlen(plaintext) + 3, sizeof(char));
+  memcpy(msg, key, strlen(key));
+  memcpy(msg + strlen(key), "#", 1);
+  memcpy(msg + strlen(key) + 1, plaintext, strlen(plaintext));
+  memcpy(msg + strlen(key) + 1 + strlen(plaintext), "$", 1);
+  
+  unsigned int total_written = 0;
+  
+  const int chunk_size = 100;
+  
+  while (1) {
+    if (total_written == strlen(msg)) {
+      break;
+    }
+    // ! TODO: this block which handles case where remaining is less than chunk size is not working correclty. 
+    if (strlen(msg) - total_written < chunk_size) {
+      memcpy(buffer, msg + total_written, strlen(msg) - total_written);
+      charsWritten = send(socketFD, buffer, strlen(buffer), 0);
+      total_written += charsWritten;
+    }
+    else {
+      memcpy(buffer, msg + total_written, chunk_size);
+      charsWritten = send(socketFD, buffer, strlen(buffer), 0);
+      if (charsWritten < 0) {
+        fprintf(stderr, "CLIENT: ERROR writing to socket, retrying\n");
+        perror(NULL);
+        continue;
+      }
+      if (charsWritten < strlen(buffer)) {
+        fprintf(stderr, "CLIENT: WARNING: Not all data written to socket!\n");
+        // TODO: handle error
+      }
+      total_written += charsWritten;
+    }
   }
+  
+  
 
-  // Get return message from server
-  // Clear out the buffer again for reuse
-  memset(buffer, '\0', sizeof(buffer));
-  // Read data from the socket, leaving \0 at end
-  charsRead = recv(socketFD, buffer, sizeof(buffer) - 1, 0); 
-  if (charsRead < 0){
-    error("CLIENT: ERROR reading from socket");
-  }
-  printf("CLIENT: I received this from the server: \"%s\"\n", buffer);
+    // // Get return message from server
+    // // Clear out the buffer again for reuse
+    // memset(buffer, '\0', sizeof(buffer));
+    // // Read data from the socket, leaving \0 at end
+    // charsRead = recv(socketFD, buffer, sizeof(buffer) - 1, 0); 
+    // if (charsRead < 0){
+    //   fprintf(stderr, "CLIENT: ERROR reading from socket");
+    // }
+    // printf("CLIENT: I received this from the server: \"%s\"\n", buffer);
 
-  // Close the socket
-  close(socketFD); 
-  return 0;
+    // Close the socket
+    close(socketFD); 
+    return 0;
 }
