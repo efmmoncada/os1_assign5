@@ -78,6 +78,12 @@ int main(int argc, char *argv[]){
       error("ERROR on accept");
     }
 
+    pid_t id = fork();
+    if (id > 0) {
+      close(connectionSocket);
+      continue;
+    }
+
     char msg[250000] = {0};
     memset(msg, '\0', sizeof(msg));
 
