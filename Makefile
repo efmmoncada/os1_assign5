@@ -19,7 +19,7 @@ dec_server: dec_server.c
 	$(CC) $(CFLAGS) -o dec_server dec_server.c
 
 clean:
-	rm -rf enc_client enc_server dec_client dec_server
+	rm -rf enc_client enc_server dec_client dec_server keygen
 
 .PHONY: 
 	clean
