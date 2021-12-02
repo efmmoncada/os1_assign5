@@ -27,17 +27,21 @@ void setupAddressStruct(struct sockaddr_in* address,
   address->sin_addr.s_addr = INADDR_ANY;
 }
 
-char *encypt(char *plaintext, char *key) {
 
+char *get_ciphertext(char *plaintext, char *key) {
+  char *ciphertext = calloc(strlen(plaintext) + 2, sizeof(char));
+  memcpy(ciphertext, plaintext, sizeof(plaintext));
+
+  for (int i = 0; i < strlen(plaintext); i++) {
+    ciphertext[i] = ((ciphertext[i] + key[i]) % 27) + 64;
+    if (ciphertext[i] == '@') ciphertext[i] = ' ';
+  }
+  ciphertext[strlen(plaintext) - 1] = '$';
+  return ciphertext;
 }
 
 int main(int argc, char *argv[]){
-  char *key = NULL;
-  char *plaintext = NULL;
-  char *msg[250000] = {0};
-
   int connectionSocket, charsRead;
-  char buffer[1001];
   struct sockaddr_in serverAddress, clientAddress;
   socklen_t sizeOfClientInfo = sizeof(clientAddress);
 
@@ -74,46 +78,52 @@ int main(int argc, char *argv[]){
       error("ERROR on accept");
     }
 
-    printf("SERVER: Connected to client running at host %d port %d\n", 
-          ntohs(clientAddress.sin_addr.s_addr),
-          ntohs(clientAddress.sin_port));
+    char msg[250000] = {0};
+    memset(msg, '\0', sizeof(msg));
 
     // Get the message from the client and display it
-    memset(buffer, '\0', sizeof(buffer));
     // Read the client's message from the socket
-    charsRead = recv(connectionSocket, buffer, 1001, 0); 
+    charsRead = recv(connectionSocket, msg, sizeof(msg) - 1, 0); 
     if (charsRead < 0){
       error("ERROR reading from socket");
     }
-    if (strcmp(buffer, "I am enc server") != 0) {
-      charsRead = send(connectionSocket, "Connection refused", 18, 0);
+    if (strcmp(msg, "I am enc server") != 0) {
+      send(connectionSocket, "Connection refused", 18, 0);
       fprintf(stderr, "Rejected connection from dec server.\n");
       close(connectionSocket);
       continue;
     }
-    // ! this cant stay for final submissoin
-    printf("SERVER: I received this from the client: \"%s\"\n", buffer);
+
     send(connectionSocket, "Connection successful", 21, 0);
 
+    unsigned int total_read = 0;
     while (1) {
-      charsRead = recv(connectionSocket, buffer, sizeof(buffer), 0);
-      printf("SERVER: I received this from the client: \"%s\"\n", buffer);
-
-      if (strstr(buffer, "$") != NULL) {
-        printf("%s\n", buffer);
+      charsRead = recv(connectionSocket, msg + total_read, sizeof(msg) - 1 - total_read, 0);
+      total_read += charsRead;
+      //printf("SERVER: I received this from the client: \"%s\"\n", msg);
+      if (strstr(msg, "$") != NULL) {
         break;
       }
     }
-    
 
-    // Send a Success message back to the client
-    charsRead = send(connectionSocket, "I am the server, and I got the whole message", 44, 0); 
-    if (charsRead < 0){
-      error("ERROR writing to socket");
+    char *key = strtok(msg, "#");
+    char *plaintext = strtok(NULL, "$");
+
+    char *ciphertext = get_ciphertext(plaintext, key);
+
+
+    unsigned int total_written = 0;
+    while (1) {
+      if (total_written >= strlen(ciphertext)) {
+        break;
+      }
+      total_written = send(connectionSocket, ciphertext + total_written, strlen(ciphertext) - total_written, 0);
     }
+  
     // Close the connection socket for this client
     close(connectionSocket); 
   }
+
   // Close the listening socket
   close(listenSocket); 
   return 0;
