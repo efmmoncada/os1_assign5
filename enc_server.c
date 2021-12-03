@@ -30,13 +30,18 @@ void setupAddressStruct(struct sockaddr_in* address,
 
 char *get_ciphertext(char *plaintext, char *key) {
   char *ciphertext = calloc(strlen(plaintext) + 2, sizeof(char));
-  memcpy(ciphertext, plaintext, sizeof(plaintext));
+  memcpy(ciphertext, plaintext, strlen(plaintext) + 1);
 
   for (int i = 0; i < strlen(plaintext); i++) {
-    ciphertext[i] = ((ciphertext[i] + key[i]) % 27) + 64;
+    if (ciphertext[i] == ' ') ciphertext[i] = '@';
+    if (key[i] == ' ') key[i] = '@';
+    int c = ciphertext[i] - 64 + key[i] - 64;
+    c = c % 27;
+    c += 64;
+    ciphertext[i] = c;
     if (ciphertext[i] == '@') ciphertext[i] = ' ';
   }
-  ciphertext[strlen(plaintext) - 1] = '$';
+  ciphertext[strlen(plaintext)] = '$';
   return ciphertext;
 }
 
@@ -106,7 +111,7 @@ int main(int argc, char *argv[]){
     while (1) {
       charsRead = recv(connectionSocket, msg + total_read, sizeof(msg) - 1 - total_read, 0);
       total_read += charsRead;
-      //printf("SERVER: I received this from the client: \"%s\"\n", msg);
+
       if (strstr(msg, "$") != NULL) {
         break;
       }

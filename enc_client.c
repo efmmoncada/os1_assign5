@@ -8,16 +8,6 @@
 #include <errno.h>
 
 
-// TODO: after accepting connection, fork, then have child process close the previous connection, then take over being the server.
-
-
-/**
-* Client code
-* 1. Create a socket and connect to the server specified in the command arugments.
-* 2. Prompt the user for input and send that input as a message to the server.
-* 3. Print the message received from the server and exit the program.
-*/
-
 // Set up the address struct
 void setupAddressStruct(struct sockaddr_in* address, 
                         int portNumber, 
@@ -136,7 +126,7 @@ int main(int argc, char *argv[]) {
   // Send message to server
   // Write to the server
   charsWritten = send(socketFD, "I am enc server", 16, 0);
-  charsRead = recv(socketFD, msg, sizeof(msg) - 1, 0);
+  charsRead = recv(socketFD, msg, 21, 0);
   if (strcmp(msg, "Connection refused") == 0) {
     fprintf(stderr, "Connection rejected by server\n");
     exit(2);
